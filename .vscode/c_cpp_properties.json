@@ -8,8 +8,8 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "r:/Data/School/OC Wetenschappen/vga_FFT/include",
-                "r:/Data/School/OC Wetenschappen/vga_FFT/src",
+                "r:/Data/Github/OC_WET/Reciever/WET_Reciever/include",
+                "r:/Data/Github/OC_WET/Reciever/WET_Reciever/src",
                 "R:/Data/Github/ArduinoLibraries/VGA_t4/src",
                 "C:/Users/NKvD Officer Walthze/.platformio/packages/framework-arduinoteensy/cores/teensy4",
                 "R:/Data/Github/ArduinoLibraries/Arduino-signal-filtering-library",
@@ -119,8 +119,8 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "r:/Data/School/OC Wetenschappen/vga_FFT/include",
-                    "r:/Data/School/OC Wetenschappen/vga_FFT/src",
+                    "r:/Data/Github/OC_WET/Reciever/WET_Reciever/include",
+                    "r:/Data/Github/OC_WET/Reciever/WET_Reciever/src",
                     "R:/Data/Github/ArduinoLibraries/VGA_t4/src",
                     "C:/Users/NKvD Officer Walthze/.platformio/packages/framework-arduinoteensy/cores/teensy4",
                     "R:/Data/Github/ArduinoLibraries/Arduino-signal-filtering-library",

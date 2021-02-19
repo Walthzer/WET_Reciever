@@ -14,8 +14,9 @@ static int fb_width, fb_height;
 
 //UI DEFINES
 #define INSET 31
-#define BLUE       VGA_RGB(0, 0, 170)
+#define RED        VGA_RGB(191, 0, 0)
 #define GREEN      VGA_RGB(0, 191, 0)
+#define BLUE       VGA_RGB(0, 0, 170)
 #define WHITE      VGA_RGB(255, 255, 255)
 #define GREY       VGA_RGB(128, 128, 128)
 #define BLACK      VGA_RGB(0, 0, 0)
@@ -67,8 +68,26 @@ float magnitudes[FFT_SIZE];
 int sampleCounter = 0;
 
 //440 Detection
-const int PROGMEM TARGET_BIN = 12;
+#define TARGET_BIN 12
+#define DBBits 400
+#define DBBytes 800
+#define TPB 250
 
+IntervalTimer detectionTimer;
+bool in_byte = false;
+int suspect_bit = -1;
+int currentBit = -1;
+int currentByte[8] = {-1};
+
+int magnitude_counter[2] = {0, 0}; //NON-SUSTAINING MAGS - SUSTAINING MAGS
+float trigger_magnitude = 450.0;
+float sustain_magnitude = 60.0;
+
+
+
+//debug
+int counter = 0;
+char serialBuffer[128];
  
 ////////////////////////////////////////////////////////////////////////////////
 // SAMPLING FUNCTIONS
@@ -159,16 +178,25 @@ void scroll_spectrum() {
 
 void roll_in() {
     for(int k = 1; k < FFT_SIZE/2; k++) {
-        Roll_In_Pl[k] = magnitude_rgb(magnitudes[k]);
+        //Roll_In_Pl[k] = magnitude_rgb(magnitudes[k]);
+        Roll_In_Pl[k] = magnitudes[k];
     }
 }
 
 void drawSpectrogram() {
     for(int i = 0; i < MAX_FFT; i++) {
+        counter++;
         for(int k = 0; k < FFT_SIZE/2; k++) {
-            vga.drawPixel(k + FFT_WINDOW[0] + 1, i + FFT_WINDOW[1] + 1, Spectogram[i][k]);
+            vga.drawPixel(k + FFT_WINDOW[0] + 1, i + FFT_WINDOW[1] + 1, magnitude_rgb(Spectogram[i][k]));
         }
-        vga.drawPixel(5 + 140 + FFT_WINDOW[0] + 1, i + FFT_WINDOW[1] + 1, Spectogram[i][12]);
+        vga.drawPixel(5 + 140 + FFT_WINDOW[0] + 1, i + FFT_WINDOW[1] + 1, magnitude_rgb(Spectogram[i][TARGET_BIN]));
+        if (Spectogram[i][TARGET_BIN] > trigger_magnitude) {
+            vga.drawPixel(5 + 150 + FFT_WINDOW[0] + 1, i + FFT_WINDOW[1] + 1, RED);
+        } else if (Spectogram[i][TARGET_BIN] > sustain_magnitude) {
+            vga.drawPixel(5 + 150 + FFT_WINDOW[0] + 1, i + FFT_WINDOW[1] + 1, BLUE);
+        } else {
+            vga.drawPixel(5 + 150 + FFT_WINDOW[0] + 1, i + FFT_WINDOW[1] + 1, BLACK);
+        }
     }
 }
 
@@ -192,10 +220,49 @@ void update_clock(int ms) {
 
 void window_print(const char* value, int* WINDOW) {
     vga.drawText(WINDOW[0] + CHAR_OFFSET + (CHAR_W * WINDOW[4]), WINDOW[1] + CHAR_OFFSET + (CHAR_H * WINDOW[5]), value, UIFrg, BLACK, false);
+
+    WINDOW[4] += (sizeof(*value));
+    Serial.print(WINDOW[4]);
+}
+
+void detect_bit_callback() {
+    int is_valid_bit = (magnitude_counter[0] >= (((magnitude_counter[0] + magnitude_counter[1]) / 3) * 2));
+    Serial.print(is_valid_bit);
+    Serial.print(" {");
+    Serial.print(magnitude_counter[0]);
+    Serial.print(", ");
+    Serial.print(magnitude_counter[1]);
+    Serial.print("} ");
+    Serial.println(suspect_bit);
+
+    if (is_valid_bit) {
+        suspect_bit++;
+        memset(magnitude_counter, 0, 2);
+    } else {
+        detectionTimer.end();
+        if (suspect_bit >= 0) {
+            currentBit++;
+            currentByte[currentBit] = suspect_bit;
+            memset(magnitude_counter, 0, 2);
+            suspect_bit = -1;
+            currentBit = -1;
+            const char temp = (char)(suspect_bit + 48); //ASCII CODE 48 -> 0
+            window_print(&temp, BIN_WINDOW);
+        }
+    }
+    if (currentBit > 7) {
+        in_byte = false;
+    }
 }
 
 void detect_440() {
-
+    if (in_byte) {
+        magnitude_counter[((int)(magnitudes[TARGET_BIN] >= sustain_magnitude) + 1)]++; // select index 1 / 2 dependend on if mag is above sustain
+    } else if (magnitudes[TARGET_BIN] >= trigger_magnitude) {
+        detectionTimer.begin(detect_bit_callback, TPB*1000);
+        in_byte = true;
+        magnitude_counter[1]++;
+    }
 }
 
 void setup() {
@@ -203,7 +270,10 @@ void setup() {
       // Set up serial port.
     Serial.begin(38400);
     
+    delay(2500);
+
     samplingTimer.priority(255);
+    detectionTimer.priority(254);
 
     //Setup Clock Trigger.
     pinMode(TRIGGER_PIN, INPUT);
@@ -246,8 +316,8 @@ void setup() {
     vga.drawRect(UTF_WINDOW[0], UTF_WINDOW[1], UTF_WINDOW[2] + 4, UTF_WINDOW[3] + 5, UIFrg); //UTF
     vga.drawRect(UTF_WINDOW[0] + 1, UTF_WINDOW[1] + 1, UTF_WINDOW[2] + 2, UTF_WINDOW[3] + 3, BLACK); //UTF
 
-    window_print("125", BIN_WINDOW);
-    window_print("125", UTF_WINDOW);
+    //window_print("1", BIN_WINDOW);
+    //window_print("1", UTF_WINDOW);
 
     // Begin sampling audio
     samplingBegin();
@@ -268,6 +338,8 @@ void loop() {
         arm_cfft_radix4_f32(&fft_inst, samples);
         // Calculate magnitude of complex numbers output by the FFT.
         arm_cmplx_mag_f32(samples, magnitudes, FFT_SIZE);
+
+        detect_440();
 
         roll_in();
         scroll_spectrum();
