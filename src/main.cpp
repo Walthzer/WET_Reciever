@@ -2,6 +2,7 @@
 #define ARM_MATH_CM7
 #include <arm_math.h>
 #include <VGA_t4.h>
+#include <Chrono.h>
 
 static VGA_T4 vga;
 static int fb_width, fb_height;
@@ -73,8 +74,9 @@ int sampleCounter = 0;
 #define DBBytes 800
 #define TPB 250
 
-IntervalTimer detectionTimer;
+Chrono detectionChrono;
 bool in_byte = false;
+bool previous_bit_valid = false;
 int suspect_bit = -1;
 int currentBit = -1;
 int currentByte[8] = {-1};
@@ -222,46 +224,57 @@ void window_print(const char* value, int* WINDOW) {
     vga.drawText(WINDOW[0] + CHAR_OFFSET + (CHAR_W * WINDOW[4]), WINDOW[1] + CHAR_OFFSET + (CHAR_H * WINDOW[5]), value, UIFrg, BLACK, false);
 
     WINDOW[4] += (sizeof(*value));
-    Serial.print(WINDOW[4]);
 }
 
-void detect_bit_callback() {
-    int is_valid_bit = (magnitude_counter[0] >= (((magnitude_counter[0] + magnitude_counter[1]) / 3) * 2));
-    Serial.print(is_valid_bit);
-    Serial.print(" {");
+void detect_bit() {
+    bool is_valid_bit = (magnitude_counter[1] >= magnitude_counter[0]);
+
+    //Serial.print(is_valid_bit);
+ /*    Serial.print(" {");
     Serial.print(magnitude_counter[0]);
     Serial.print(", ");
     Serial.print(magnitude_counter[1]);
     Serial.print("} ");
-    Serial.println(suspect_bit);
+    Serial.print(suspect_bit);
+    Serial.println(currentBit); */
 
-    if (is_valid_bit) {
+    magnitude_counter[0] = 0;
+    magnitude_counter[1] = 0;
+
+    if (is_valid_bit && suspect_bit <= 1) {
         suspect_bit++;
-        memset(magnitude_counter, 0, 2);
+        
     } else {
-        detectionTimer.end();
-        if (suspect_bit >= 0) {
-            currentBit++;
-            currentByte[currentBit] = suspect_bit;
-            memset(magnitude_counter, 0, 2);
-            suspect_bit = -1;
-            currentBit = -1;
-            const char temp = (char)(suspect_bit + 48); //ASCII CODE 48 -> 0
-            window_print(&temp, BIN_WINDOW);
-        }
+        currentBit++;
+        currentByte[currentBit] = suspect_bit;
+
+        
+        Serial.print(suspect_bit);
+        const char temp = (char)(suspect_bit + 48); //ASCII CODE 48 -> 0
+        window_print(&temp, BIN_WINDOW);
+        suspect_bit = -1;
     }
-    if (currentBit > 7) {
+    if (currentBit == 7) {
+        currentBit = -1;
         in_byte = false;
+        Serial.println("ENDB");
     }
 }
 
 void detect_440() {
     if (in_byte) {
-        magnitude_counter[((int)(magnitudes[TARGET_BIN] >= sustain_magnitude) + 1)]++; // select index 1 / 2 dependend on if mag is above sustain
+        if (magnitudes[TARGET_BIN] >= sustain_magnitude) {
+            magnitude_counter[1]++;
+        } else {
+            magnitude_counter[0]++;
+        }
+        if (detectionChrono.hasPassed(TPB, true)) {
+            detect_bit();
+        }
     } else if (magnitudes[TARGET_BIN] >= trigger_magnitude) {
-        detectionTimer.begin(detect_bit_callback, TPB*1000);
         in_byte = true;
         magnitude_counter[1]++;
+        detectionChrono.restart();
     }
 }
 
@@ -273,7 +286,6 @@ void setup() {
     delay(2500);
 
     samplingTimer.priority(255);
-    detectionTimer.priority(254);
 
     //Setup Clock Trigger.
     pinMode(TRIGGER_PIN, INPUT);
