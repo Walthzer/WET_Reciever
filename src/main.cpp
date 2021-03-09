@@ -1,4 +1,7 @@
 #include <Arduino.h>
+
+#define DEBUG
+
 #define ARM_MATH_CM7
 #include <arm_math.h>
 #include <VGA_t4.h>
