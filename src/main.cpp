@@ -69,8 +69,15 @@ float samples[FFT_SIZE*2];
 float magnitudes[FFT_SIZE];
 int sampleCounter = 0;
 
+
 //440 Detection
-const int PROGMEM TARGET_BIN = 12;
+#define TARGET_BIN 12
+#define THRESHOLD 450.0
+#define SPB 35 
+
+int magnitudedSampelsCounter_440 = 0;
+int magnitude_counter_440[2] = {0, 0}; //NON-SUSTAINING MAGS - SUSTAINING MAGS
+
 
  
 ////////////////////////////////////////////////////////////////////////////////
@@ -198,10 +205,12 @@ void window_print(const char* value, int* WINDOW) {
 }
 
 void detect_440() {
-
+    int Bool = (int)(magnitudes[TARGET_BIN] >= THRESHOLD);
+    magnitude_counter_440[Bool] += 1;
+    magnitudedSampelsCounter_440 += Bool;
 }
 
-void setup() {
+void setup() {v
 
       // Set up serial port.
     Serial.begin(38400);
@@ -258,12 +267,6 @@ void setup() {
 
 void loop() {
 
-    if (clock_on) {
-        update_clock(ms);
-        //vga.waitSync();
-        vga.drawText(CLK_WINDOW[2]/2 + CLK_WINDOW[0] - 30,CLK_WINDOW[3]/2 + CLK_WINDOW[1] - 7, clock, UIFrg, BLACK, true); //Clock-TEXT
-    }
-
     if (samplingIsDone()) {
         // Run FFT on sample data.
         arm_cfft_radix4_instance_f32 fft_inst;
@@ -272,6 +275,8 @@ void loop() {
         // Calculate magnitude of complex numbers output by the FFT.
         arm_cmplx_mag_f32(samples, magnitudes, FFT_SIZE);
 
+        detect_440();
+
         roll_in();
         scroll_spectrum();
 
@@ -279,6 +284,14 @@ void loop() {
         samplingBegin();
     }
 
+    if(magnitudedSampelsCounter_440 >= SPB) {
+        int Bool = magnitude_counter_440
+    }
+
     vga.waitSync();
+    if (clock_on) {
+        update_clock(ms);
+        vga.drawText(CLK_WINDOW[2]/2 + CLK_WINDOW[0] - 30,CLK_WINDOW[3]/2 + CLK_WINDOW[1] - 7, clock, UIFrg, BLACK, true); //Clock-TEXT
+    }
     drawSpectrogram();
 }
